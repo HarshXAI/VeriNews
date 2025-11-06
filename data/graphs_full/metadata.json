@@ -1,0 +1,12 @@
+{
+  "num_samples": 23196,
+  "num_nodes": 23194,
+  "num_edges": 510,
+  "embedding_dim": 384,
+  "num_fake": 5755,
+  "num_real": 17441,
+  "sources": {
+    "gossipcop": 22140,
+    "politifact": 1056
+  }
+}

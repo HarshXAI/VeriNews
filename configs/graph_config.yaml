@@ -1,0 +1,151 @@
+# Graph Construction Configuration
+
+graph:
+  # Graph Type
+  type: "heterogeneous"  # Options: homogeneous, heterogeneous
+  
+  # Node Types
+  node_types:
+    - "user"
+    - "post"
+    - "source"
+  
+  # Edge Types and Construction
+  edges:
+    user_to_user:
+      enabled: true
+      relations:
+        - type: "follows"
+          source: "user_followers"
+          bidirectional: false
+        - type: "mentions"
+          source: "user_mentions"
+          bidirectional: false
+    
+    user_to_post:
+      enabled: true
+      relations:
+        - type: "retweets"
+          source: "retweet_data"
+          weight: "retweet_count"
+        - type: "replies"
+          source: "reply_data"
+          weight: "reply_count"
+        - type: "likes"
+          source: "like_data"
+          weight: "like_count"
+    
+    post_to_source:
+      enabled: true
+      relations:
+        - type: "published_by"
+          source: "post_metadata"
+  
+  # Edge Weight Computation
+  edge_weights:
+    method: "normalized"  # Options: binary, count, normalized, custom
+    normalization: "min_max"  # Options: min_max, z_score, log
+    threshold: 0.0
+  
+  # Graph Filtering
+  filtering:
+    min_node_degree: 1
+    max_node_degree: 1000
+    remove_isolates: true
+    remove_self_loops_preprocessing: false
+  
+  # Temporal Aspects
+  temporal:
+    enabled: true
+    time_window_hours: 168  # 1 week
+    time_decay: true
+    decay_factor: 0.95
+
+# Feature Engineering
+features:
+  # User Features
+  user_features:
+    - name: "followers_count"
+      type: "numerical"
+      normalization: "log"
+    - name: "following_count"
+      type: "numerical"
+      normalization: "log"
+    - name: "account_age_days"
+      type: "numerical"
+      normalization: "log"
+    - name: "verified"
+      type: "categorical"
+    - name: "engagement_rate"
+      type: "numerical"
+      normalization: "min_max"
+    - name: "posting_frequency"
+      type: "numerical"
+      normalization: "min_max"
+  
+  # Post Features
+  post_features:
+    text:
+      embedding_model: "sentence-transformers/all-MiniLM-L6-v2"
+      max_length: 512
+      pooling: "mean"
+      use_cache: true
+    
+    metadata:
+      - name: "retweet_count"
+        type: "numerical"
+        normalization: "log"
+      - name: "like_count"
+        type: "numerical"
+        normalization: "log"
+      - name: "reply_count"
+        type: "numerical"
+        normalization: "log"
+      - name: "has_media"
+        type: "categorical"
+      - name: "has_url"
+        type: "categorical"
+  
+  # Source Features
+  source_features:
+    - name: "credibility_score"
+      type: "numerical"
+      normalization: "min_max"
+    - name: "source_type"
+      type: "categorical"
+    - name: "historical_accuracy"
+      type: "numerical"
+      normalization: "min_max"
+
+# Propagation Tree Construction
+propagation:
+  root_node: "original_post"
+  max_depth: 5
+  min_cascade_size: 3
+  time_ordering: true
+  
+  # Propagation Metrics
+  metrics:
+    - "cascade_depth"
+    - "cascade_breadth"
+    - "viral_coefficient"
+    - "propagation_speed"
+
+# Output
+output:
+  format: "pytorch_geometric"  # Options: pytorch_geometric, dgl, networkx
+  save_format: "pickle"
+  include_metadata: true
+  
+# Processing
+processing:
+  parallel: true
+  num_workers: 4
+  batch_size: 1000
+  cache_intermediate: true
+
+# Validation
+validation:
+  check_graph_connectivity: true
+  check_feature_completeness: true
+  log_statistics: true

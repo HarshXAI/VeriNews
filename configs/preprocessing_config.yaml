@@ -1,0 +1,156 @@
+# Data Preprocessing Configuration
+
+# Input Paths
+input:
+  raw_data_dir: "./data/raw"
+  fakenewsnet_dir: "./data/raw/fakenewsnet"
+  
+# Output Paths
+output:
+  processed_dir: "./data/processed"
+  graphs_dir: "./data/graphs"
+  cache_dir: "./data/cache"
+
+# Dataset Selection
+dataset:
+  sources:
+    - "politifact"
+    - "gossipcop"
+  include_all: true
+
+# Text Processing
+text_processing:
+  # Cleaning
+  cleaning:
+    remove_urls: true
+    remove_mentions: true
+    remove_hashtags: false
+    remove_emojis: true
+    remove_special_chars: true
+    lowercase: true
+    remove_extra_whitespace: true
+  
+  # Tokenization
+  tokenization:
+    method: "spacy"  # Options: spacy, nltk, custom
+    language: "en_core_web_sm"
+  
+  # Stopwords
+  stopwords:
+    remove: true
+    language: "english"
+    custom_stopwords: []
+  
+  # Lemmatization/Stemming
+  normalization:
+    method: "lemmatization"  # Options: lemmatization, stemming, none
+    
+  # Text Length
+  length:
+    min_length: 10
+    max_length: 512
+
+# User Profile Processing
+user_processing:
+  # Feature Extraction
+  features:
+    basic:
+      - "followers_count"
+      - "friends_count"
+      - "statuses_count"
+      - "favourites_count"
+      - "listed_count"
+    
+    computed:
+      - "account_age"
+      - "follower_friend_ratio"
+      - "engagement_rate"
+      - "posting_frequency"
+      - "verified_status"
+    
+    temporal:
+      - "activity_distribution"
+      - "posting_time_patterns"
+  
+  # Missing Value Handling
+  missing_values:
+    strategy: "mean"  # Options: mean, median, drop, fill_zero
+    threshold: 0.5  # Drop features with >50% missing
+  
+  # Outlier Detection
+  outliers:
+    method: "iqr"  # Options: iqr, zscore, isolation_forest
+    action: "clip"  # Options: clip, remove, keep
+
+# Social Network Processing
+network_processing:
+  # Relationship Extraction
+  relationships:
+    extract_followers: true
+    extract_friends: true
+    extract_mentions: true
+    extract_retweets: true
+    extract_replies: true
+  
+  # Filtering
+  filtering:
+    min_interactions: 1
+    max_bot_score: 0.8
+    verified_only: false
+
+# Temporal Processing
+temporal:
+  # Time Window
+  time_window:
+    enabled: true
+    start_date: null  # Auto-detect from data
+    end_date: null    # Auto-detect from data
+    
+  # Time Features
+  time_features:
+    - "hour_of_day"
+    - "day_of_week"
+    - "time_since_account_creation"
+    - "time_since_original_post"
+
+# Label Processing
+labels:
+  # Encoding
+  encoding:
+    fake: 0
+    real: 1
+  
+  # Verification
+  verify_labels: true
+  handle_missing: "drop"  # Options: drop, majority, uncertain
+
+# Data Validation
+validation:
+  # Quality Checks
+  checks:
+    min_text_length: 10
+    max_missing_features: 0.3
+    check_duplicate_posts: true
+    check_bot_accounts: true
+  
+  # Statistics
+  compute_statistics: true
+  save_report: true
+
+# Output Format
+output_format:
+  posts: "parquet"       # Options: parquet, csv, json
+  users: "parquet"
+  relationships: "parquet"
+  graphs: "pickle"       # PyTorch Geometric format
+
+# Processing Options
+processing:
+  parallel: true
+  num_workers: 4
+  chunk_size: 10000
+  verbose: true
+  save_intermediate: true
+
+# Random Seed
+seed: 42

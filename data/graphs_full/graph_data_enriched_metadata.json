@@ -1,0 +1,17 @@
+{
+  "num_nodes": 23196,
+  "num_edges": 106919,
+  "avg_degree": 4.609372305569926,
+  "edge_types": {
+    "content_similar": 95325,
+    "same_source": 1000,
+    "fake_network": 5000,
+    "real_network": 5000,
+    "high_activity": 594
+  },
+  "config": {
+    "k_similar": 10,
+    "k_source": 5,
+    "similarity_threshold": 0.6
+  }
+}

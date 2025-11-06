@@ -1,0 +1,108 @@
+# Model Configuration for GAT-based Fake News Detection
+
+model:
+  name: "FakeNewsGAT"
+  type: "graph_attention_network"
+  
+  # Architecture
+  architecture:
+    in_channels: 768  # Input feature dimension (BERT embeddings)
+    hidden_channels: 128
+    out_channels: 2  # Binary classification (fake/real)
+    num_layers: 3
+    num_heads: 8  # Number of attention heads per layer
+    dropout: 0.3
+    concat_heads: true  # Concatenate or average attention heads
+    
+  # Attention Mechanism
+  attention:
+    attention_type: "gat"  # Options: gat, gatv2
+    edge_dim: null  # Edge feature dimension (if using edge features)
+    negative_slope: 0.2  # LeakyReLU negative slope
+    add_self_loops: true
+    
+  # Aggregation
+  aggregation:
+    method: "mean"  # Options: mean, max, sum
+    readout: "global_mean_pool"  # Graph-level pooling
+    
+  # Output
+  output:
+    use_batch_norm: true
+    activation: "relu"
+
+# Training Configuration
+training:
+  epochs: 100
+  batch_size: 32
+  learning_rate: 0.001
+  weight_decay: 0.0005
+  optimizer: "adam"
+  scheduler:
+    type: "reduce_on_plateau"
+    mode: "max"
+    factor: 0.5
+    patience: 5
+    min_lr: 0.00001
+  
+  # Loss Function
+  loss:
+    type: "cross_entropy"
+    class_weights: null  # Auto-compute or [weight_fake, weight_real]
+    
+  # Regularization
+  regularization:
+    gradient_clip: 1.0
+    early_stopping:
+      enabled: true
+      patience: 10
+      metric: "val_f1"
+      mode: "max"
+
+# Data Configuration
+data:
+  train_split: 0.7
+  val_split: 0.15
+  test_split: 0.15
+  random_seed: 42
+  shuffle: true
+  
+  # Graph Construction
+  graph:
+    edge_types:
+      - "retweet"
+      - "reply"
+      - "mention"
+    min_edge_weight: 0.0
+    directed: true
+    self_loops: true
+
+# Evaluation Metrics
+evaluation:
+  metrics:
+    - "accuracy"
+    - "precision"
+    - "recall"
+    - "f1"
+    - "auc_roc"
+    - "confusion_matrix"
+  
+  # Interpretability
+  interpretability:
+    save_attention_weights: true
+    top_k_influencers: 20
+    visualize_propagation: true
+
+# Logging
+logging:
+  use_tensorboard: true
+  use_wandb: false
+  log_interval: 10
+  save_checkpoint_interval: 5
+  
+# Device
+device: "auto"  # Options: cuda, mps, cpu, auto
+
+# Reproducibility
+seed: 42
+deterministic: true
