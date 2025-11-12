@@ -3,29 +3,29 @@
 model:
   name: "FakeNewsGAT"
   type: "graph_attention_network"
-  
+
   # Architecture
   architecture:
-    in_channels: 768  # Input feature dimension (BERT embeddings)
+    in_channels: 768 # Input feature dimension (BERT embeddings)
     hidden_channels: 128
-    out_channels: 2  # Binary classification (fake/real)
+    out_channels: 2 # Binary classification (fake/real)
     num_layers: 3
-    num_heads: 8  # Number of attention heads per layer
+    num_heads: 8 # Number of attention heads per layer
     dropout: 0.3
-    concat_heads: true  # Concatenate or average attention heads
-    
+    concat_heads: true # Concatenate or average attention heads
+
   # Attention Mechanism
   attention:
-    attention_type: "gat"  # Options: gat, gatv2
-    edge_dim: null  # Edge feature dimension (if using edge features)
-    negative_slope: 0.2  # LeakyReLU negative slope
+    attention_type: "gat" # Options: gat, gatv2
+    edge_dim: null # Edge feature dimension (if using edge features)
+    negative_slope: 0.2 # LeakyReLU negative slope
     add_self_loops: true
-    
+
   # Aggregation
   aggregation:
-    method: "mean"  # Options: mean, max, sum
-    readout: "global_mean_pool"  # Graph-level pooling
-    
+    method: "mean" # Options: mean, max, sum
+    readout: "global_mean_pool" # Graph-level pooling
+
   # Output
   output:
     use_batch_norm: true
@@ -44,12 +44,12 @@ training:
     factor: 0.5
     patience: 5
     min_lr: 0.00001
-  
+
   # Loss Function
   loss:
     type: "cross_entropy"
-    class_weights: null  # Auto-compute or [weight_fake, weight_real]
-    
+    class_weights: null # Auto-compute or [weight_fake, weight_real]
+
   # Regularization
   regularization:
     gradient_clip: 1.0
@@ -66,7 +66,7 @@ data:
   test_split: 0.15
   random_seed: 42
   shuffle: true
-  
+
   # Graph Construction
   graph:
     edge_types:
@@ -86,7 +86,7 @@ evaluation:
     - "f1"
     - "auc_roc"
     - "confusion_matrix"
-  
+
   # Interpretability
   interpretability:
     save_attention_weights: true
@@ -99,9 +99,9 @@ logging:
   use_wandb: false
   log_interval: 10
   save_checkpoint_interval: 5
-  
+
 # Device
-device: "auto"  # Options: cuda, mps, cpu, auto
+device: "auto" # Options: cuda, mps, cpu, auto
 
 # Reproducibility
 seed: 42

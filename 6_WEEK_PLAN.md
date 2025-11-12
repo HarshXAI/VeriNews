@@ -13,6 +13,7 @@
 **Goal**: Train on all 23,196 articles instead of 500
 
 #### Tasks:
+
 1. ✅ Implement neighbor sampling for large graphs
 2. ✅ Create mini-batch training pipeline
 3. ✅ Train model on progressively larger subsets (1K → 5K → 10K → 23K)
@@ -20,11 +21,13 @@
 5. ✅ Model ensemble (train 3-5 models with different seeds)
 
 #### Expected Outcomes:
+
 - 📈 +10-15% F1-score improvement (target: 95%+ F1)
 - 🎯 Robust model on full dataset
 - 📊 Better generalization
 
 #### Deliverables:
+
 - `scripts/train_gat_large.py` - Training script with neighbor sampling
 - `scripts/hyperparameter_search.py` - Grid search script
 - `experiments/full_dataset_results/` - Results on 23K nodes
@@ -39,6 +42,7 @@
 #### Tasks:
 
 **1. Sentiment Analysis** (1 day)
+
 ```python
 from transformers import pipeline
 sentiment_analyzer = pipeline("sentiment-analysis")
@@ -50,6 +54,7 @@ news_df['sentiment_score'] = news_df['text'].apply(
 ```
 
 **2. Source Credibility** (1 day)
+
 ```python
 # Calculate source reputation
 source_stats = news_df.groupby('source').agg({
@@ -60,6 +65,7 @@ source_stats = news_df.groupby('source').agg({
 ```
 
 **3. Named Entity Recognition** (2 days)
+
 ```python
 import spacy
 nlp = spacy.load("en_core_web_sm")
@@ -75,6 +81,7 @@ def extract_entities(text):
 ```
 
 **4. Readability Scores** (1 day)
+
 ```python
 import textstat
 
@@ -84,6 +91,7 @@ news_df['gunning_fog'] = news_df['text'].apply(textstat.gunning_fog)
 ```
 
 **5. Writing Style Features** (2 days)
+
 ```python
 # Linguistic features
 - Exclamation marks count
@@ -94,11 +102,13 @@ news_df['gunning_fog'] = news_df['text'].apply(textstat.gunning_fog)
 ```
 
 #### Expected Outcomes:
+
 - 🎨 Rich multi-dimensional features
 - 📈 +5-10% F1-score improvement
 - 🔍 Better understanding of fake news patterns
 
 #### Deliverables:
+
 - `scripts/feature_engineering.py` - Feature extraction pipeline
 - `data/enhanced_features.pt` - New feature tensor
 - `experiments/feature_analysis/` - Feature importance analysis
@@ -113,6 +123,7 @@ news_df['gunning_fog'] = news_df['text'].apply(textstat.gunning_fog)
 #### Tasks:
 
 **1. GNNExplainer Integration** (2 days)
+
 ```python
 from torch_geometric.explain import Explainer, GNNExplainer
 
@@ -129,6 +140,7 @@ explanation = explainer(data.x, data.edge_index, index=node_id)
 ```
 
 **2. Counterfactual Explanations** (2 days)
+
 ```python
 # "What would need to change for this to be classified differently?"
 def generate_counterfactual(node_id, target_class):
@@ -138,6 +150,7 @@ def generate_counterfactual(node_id, target_class):
 ```
 
 **3. Interactive Visualizations** (3 days)
+
 ```python
 # Create interactive plots with Plotly
 import plotly.graph_objects as go
@@ -149,6 +162,7 @@ import plotly.express as px
 ```
 
 **4. Natural Language Explanations** (2 days)
+
 ```python
 def generate_explanation(node_id):
     """
@@ -156,13 +170,13 @@ def generate_explanation(node_id):
     """
     explanation = f"""
     Article {node_id} is classified as {prediction} with {confidence:.1%} confidence.
-    
+
     Key factors:
     1. Network Position: Connected to {num_fake_neighbors} known fake articles
     2. Content Features: Sentiment score {sentiment}, readability {readability}
     3. Source: Published by {source} (credibility: {cred_score})
     4. Writing Style: {style_issues}
-    
+
     Top 3 similar fake articles: {similar_articles}
     Top 3 attention connections: {top_attention_edges}
     """
@@ -170,6 +184,7 @@ def generate_explanation(node_id):
 ```
 
 **5. SHAP Values** (2 days)
+
 ```python
 import shap
 
@@ -179,6 +194,7 @@ import shap
 ```
 
 **6. Jupyter Notebook Showcase** (1 day)
+
 ```python
 # Create comprehensive analysis notebook
 # Include all visualizations
@@ -187,12 +203,14 @@ import shap
 ```
 
 #### Expected Outcomes:
+
 - 🎯 Fully explainable predictions
 - 🎨 Beautiful interactive visualizations
 - 📊 Publication-quality figures
 - 📓 Demo-ready notebook
 
 #### Deliverables:
+
 - `scripts/explainability_analysis.py` - Explainer implementations
 - `notebooks/comprehensive_analysis.ipynb` - Main showcase notebook
 - `experiments/explainability/` - All explanation visualizations
@@ -212,11 +230,13 @@ I'll create these scripts for you now...
 ### After 6 Weeks, You'll Have:
 
 **Model Performance**:
+
 - ✅ 92-95%+ F1-score on full 23,196 articles
 - ✅ Robust across different topics and sources
 - ✅ Ensemble of 3-5 models for reliability
 
 **Rich Feature Set**:
+
 - ✅ BERT embeddings (384-dim)
 - ✅ Sentiment scores
 - ✅ Source credibility
@@ -226,6 +246,7 @@ I'll create these scripts for you now...
 - **Total**: ~400+ dimensional features
 
 **Explainability Tools**:
+
 - ✅ GNNExplainer for subgraph importance
 - ✅ Attention weight analysis (already done!)
 - ✅ SHAP values for feature importance
@@ -234,6 +255,7 @@ I'll create these scripts for you now...
 - ✅ Interactive HTML dashboard
 
 **Documentation**:
+
 - ✅ Comprehensive Jupyter notebook
 - ✅ All analysis reports (already done!)
 - ✅ Feature importance analysis
@@ -246,27 +268,27 @@ I'll create these scripts for you now...
 
 By Week 6, you should achieve:
 
-| Metric | Current | Target | Status |
-|--------|---------|--------|--------|
-| F1-Score | 88.24% | 93-95% | 🎯 |
-| Dataset Size | 500 | 23,196 | 📈 |
-| Features | 384 | 400+ | 🎨 |
-| Explainability | Basic | Advanced | 🔍 |
-| Visualizations | 10 | 20+ | 📊 |
-| Interactive | 1 HTML | 5+ HTML | 🌐 |
+| Metric         | Current | Target   | Status |
+| -------------- | ------- | -------- | ------ |
+| F1-Score       | 88.24%  | 93-95%   | 🎯     |
+| Dataset Size   | 500     | 23,196   | 📈     |
+| Features       | 384     | 400+     | 🎨     |
+| Explainability | Basic   | Advanced | 🔍     |
+| Visualizations | 10      | 20+      | 📊     |
+| Interactive    | 1 HTML  | 5+ HTML  | 🌐     |
 
 ---
 
 ## 💪 Week-by-Week Effort
 
-| Week | Focus | Hours | Difficulty |
-|------|-------|-------|------------|
-| 1 | Large-scale training setup | 12-15h | Medium |
-| 2 | Training & tuning | 10-12h | Medium |
-| 3 | Feature engineering | 12-15h | Easy-Medium |
-| 4 | Feature integration & testing | 10-12h | Medium |
-| 5 | Explainability implementation | 12-15h | Medium-Hard |
-| 6 | Visualizations & notebook | 12-15h | Medium |
+| Week | Focus                         | Hours  | Difficulty  |
+| ---- | ----------------------------- | ------ | ----------- |
+| 1    | Large-scale training setup    | 12-15h | Medium      |
+| 2    | Training & tuning             | 10-12h | Medium      |
+| 3    | Feature engineering           | 12-15h | Easy-Medium |
+| 4    | Feature integration & testing | 10-12h | Medium      |
+| 5    | Explainability implementation | 12-15h | Medium-Hard |
+| 6    | Visualizations & notebook     | 12-15h | Medium      |
 
 **Total**: ~70-85 hours over 6 weeks
 
@@ -277,18 +299,21 @@ By Week 6, you should achieve:
 ### This Week (Week 1):
 
 **Day 1-2**: Set up large-scale training
+
 ```bash
 # I'll create the script for you
 python scripts/train_gat_large.py --num-nodes 1000 --sample-size 50
 ```
 
 **Day 3-4**: Test on increasing sizes
+
 ```bash
 python scripts/train_gat_large.py --num-nodes 5000
 python scripts/train_gat_large.py --num-nodes 10000
 ```
 
 **Day 5-7**: Full training + hyperparameter search
+
 ```bash
 python scripts/hyperparameter_search.py --max-nodes 23196
 ```
@@ -314,6 +339,7 @@ After 6 weeks:
 > "I built a Graph Attention Network for fake news detection that achieves 95% F1-score on 23K articles. The model uses multi-dimensional features including sentiment, source credibility, and linguistic patterns. I implemented full explainability with GNNExplainer and SHAP values, and created interactive visualizations to understand how the model makes decisions. The project revealed that fake news forms dense echo chambers with 70% of connections being fake-to-fake, which the attention mechanism learned to exploit."
 
 **Perfect for**:
+
 - 📝 Academic projects
 - 💼 Job interviews
 - 🎓 Graduate school applications

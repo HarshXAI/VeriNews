@@ -2,14 +2,14 @@
 
 graph:
   # Graph Type
-  type: "heterogeneous"  # Options: homogeneous, heterogeneous
-  
+  type: "heterogeneous" # Options: homogeneous, heterogeneous
+
   # Node Types
   node_types:
     - "user"
     - "post"
     - "source"
-  
+
   # Edge Types and Construction
   edges:
     user_to_user:
@@ -21,7 +21,7 @@ graph:
         - type: "mentions"
           source: "user_mentions"
           bidirectional: false
-    
+
     user_to_post:
       enabled: true
       relations:
@@ -34,30 +34,30 @@ graph:
         - type: "likes"
           source: "like_data"
           weight: "like_count"
-    
+
     post_to_source:
       enabled: true
       relations:
         - type: "published_by"
           source: "post_metadata"
-  
+
   # Edge Weight Computation
   edge_weights:
-    method: "normalized"  # Options: binary, count, normalized, custom
-    normalization: "min_max"  # Options: min_max, z_score, log
+    method: "normalized" # Options: binary, count, normalized, custom
+    normalization: "min_max" # Options: min_max, z_score, log
     threshold: 0.0
-  
+
   # Graph Filtering
   filtering:
     min_node_degree: 1
     max_node_degree: 1000
     remove_isolates: true
     remove_self_loops_preprocessing: false
-  
+
   # Temporal Aspects
   temporal:
     enabled: true
-    time_window_hours: 168  # 1 week
+    time_window_hours: 168 # 1 week
     time_decay: true
     decay_factor: 0.95
 
@@ -82,7 +82,7 @@ features:
     - name: "posting_frequency"
       type: "numerical"
       normalization: "min_max"
-  
+
   # Post Features
   post_features:
     text:
@@ -90,7 +90,7 @@ features:
       max_length: 512
       pooling: "mean"
       use_cache: true
-    
+
     metadata:
       - name: "retweet_count"
         type: "numerical"
@@ -105,7 +105,7 @@ features:
         type: "categorical"
       - name: "has_url"
         type: "categorical"
-  
+
   # Source Features
   source_features:
     - name: "credibility_score"
@@ -123,7 +123,7 @@ propagation:
   max_depth: 5
   min_cascade_size: 3
   time_ordering: true
-  
+
   # Propagation Metrics
   metrics:
     - "cascade_depth"
@@ -133,10 +133,10 @@ propagation:
 
 # Output
 output:
-  format: "pytorch_geometric"  # Options: pytorch_geometric, dgl, networkx
+  format: "pytorch_geometric" # Options: pytorch_geometric, dgl, networkx
   save_format: "pickle"
   include_metadata: true
-  
+
 # Processing
 processing:
   parallel: true

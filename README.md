@@ -15,6 +15,7 @@ A research-grade implementation for detecting and analyzing fake news propagatio
 **FakeNewsNet**: https://github.com/KaiDMML/FakeNewsNet
 
 Components:
+
 - News content (source, headline, body text, images/videos)
 - Social context (user profiles, content, followers, followees)
 - User-user and user-post interaction graphs
@@ -44,17 +45,20 @@ majorProject/
 ## 🚀 Setup Instructions
 
 ### Prerequisites
+
 - Python 3.10+
 - uv package manager
 
 ### Installation
 
 1. **Install uv** (if not already installed):
+
 ```bash
 curl -LsSf https://astral.sh/uv/install.sh | sh
 ```
 
 2. **Create virtual environment and install dependencies**:
+
 ```bash
 # Initialize project with uv
 uv venv
@@ -67,6 +71,7 @@ uv pip install -e .
 ```
 
 3. **Download FakeNewsNet dataset**:
+
 ```bash
 python scripts/download_dataset.py
 ```
@@ -74,21 +79,25 @@ python scripts/download_dataset.py
 ## 🔬 Research Pipeline
 
 ### Stage 1: Data Ingestion and Preprocessing
+
 ```bash
 python src/data/preprocess.py --input data/raw --output data/processed
 ```
 
 ### Stage 2: Graph Construction and Feature Engineering
+
 ```bash
 python src/features/build_graph.py --config configs/graph_config.yaml
 ```
 
 ### Stage 3: Model Training
+
 ```bash
 python src/training/train_gat.py --config configs/model_config.yaml
 ```
 
 ### Stage 4: Evaluation and Analysis
+
 ```bash
 python src/evaluation/evaluate.py --checkpoint experiments/best_model.pt
 python src/visualization/generate_reports.py
@@ -97,12 +106,14 @@ python src/visualization/generate_reports.py
 ## 📈 Expected Results
 
 ### Metrics
+
 - Accuracy
 - F1-Score
 - AUC-ROC
 - Explanation Fidelity
 
 ### Visualizations
+
 - Propagation graphs
 - Attention-based influence maps
 - Confusion matrices
@@ -111,6 +122,7 @@ python src/visualization/generate_reports.py
 ## 🧪 Usage Examples
 
 ### Training a GAT Model
+
 ```python
 from src.models.gat_model import FakeNewsGAT
 from src.training.trainer import GATTrainer
@@ -127,6 +139,7 @@ trainer.train(epochs=100)
 ```
 
 ### Analyzing Key Spreaders
+
 ```python
 from src.evaluation.explainability import AttentionAnalyzer
 
@@ -146,6 +159,7 @@ analyzer.visualize_propagation_tree(news_id='article_123')
 ## 🔍 Interpretability
 
 All predictions are accompanied by:
+
 - Attention weight distributions
 - Top influential users in propagation chains
 - Propagation path visualizations

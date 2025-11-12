@@ -1,12 +1,14 @@
 # Project placeholder files
 
 # Data directories
+
 /data/raw/
 /data/processed/
 /data/graphs/
 /data/cache/
 
 # Experiment directories
+
 /experiments/
 /outputs/
 /logs/

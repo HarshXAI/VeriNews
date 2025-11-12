@@ -164,7 +164,8 @@ def main():
     print("🚀 LARGE-SCALE GAT TRAINING")
     print("="*70)
     
-    device = get_device() if args.device == "auto" else args.device
+    # Force CPU to avoid MPS/torch-sparse compatibility issues
+    device = "cpu" if args.device == "auto" else args.device
     print(f"\n🖥️  Device: {device}")
     
     # Load data

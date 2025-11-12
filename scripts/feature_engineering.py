@@ -191,8 +191,14 @@ def main():
     print(f"  ✓ Loaded {len(news_df)} articles")
     print(f"  ✓ Current features: {graph_data.x.shape}")
     
-    # Get texts
-    texts = news_df['text'].fillna('').tolist()
+    # Get texts (use title if text not available)
+    if 'text' in news_df.columns:
+        texts = news_df['text'].fillna('').tolist()
+    elif 'title' in news_df.columns:
+        texts = news_df['title'].fillna('').tolist()
+        print(f"  ℹ️  Using titles (no full text available)")
+    else:
+        raise ValueError("No text or title column found")
     
     # Extract all features
     print(f"\n🔍 Extracting enhanced features...")

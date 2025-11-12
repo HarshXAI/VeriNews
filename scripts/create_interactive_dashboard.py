@@ -100,12 +100,12 @@ def create_attention_dashboard(attention_stats_path):
     fig = make_subplots(
         rows=2, cols=2,
         subplot_titles=(
-            'Attention by Connection Type',
-            'Attention Distribution',
+            'Attention by Connection Type (Mean)',
+            'Attention Variability (Std Dev)',
             'Layer Comparison',
             'Edge Type Composition'
         ),
-        specs=[[{"type": "bar"}, {"type": "box"}],
+        specs=[[{"type": "bar"}, {"type": "bar"}],
                [{"type": "scatter"}, {"type": "pie"}]]
     )
     
@@ -118,29 +118,28 @@ def create_attention_dashboard(attention_stats_path):
     if not layers_data:
         return None
     
-    # 1. Attention by type (stacked bar)
-    connection_types = list(layers_data[0]['by_type'].keys())
+    # Get connection types from first layer
+    connection_types = list(layers_data[0].keys())
+    
+    # 1. Attention by type (grouped bar - mean values)
     for i, layer in enumerate(layers_data, 1):
-        means = [layer['by_type'][t]['mean'] for t in connection_types]
+        means = [layer[t]['mean'] for t in connection_types]
         fig.add_trace(
             go.Bar(name=f'Layer {i}', x=connection_types, y=means),
             row=1, col=1
         )
     
-    # 2. Box plot of distributions
+    # 2. Standard deviation (shows uncertainty)
     for i, layer in enumerate(layers_data, 1):
-        for conn_type in connection_types:
-            if 'values' in layer['by_type'][conn_type]:
-                vals = layer['by_type'][conn_type]['values'][:1000]  # Limit for performance
-                fig.add_trace(
-                    go.Box(y=vals, name=f'L{i} {conn_type}', showlegend=False),
-                    row=1, col=2
-                )
+        stds = [layer[t]['std'] for t in connection_types]
+        fig.add_trace(
+            go.Bar(name=f'Layer {i}', x=connection_types, y=stds, showlegend=False),
+            row=1, col=2
+        )
     
     # 3. Layer comparison scatter
-    layer_means = []
     for i, layer in enumerate(layers_data, 1):
-        means = [layer['by_type'][t]['mean'] for t in connection_types]
+        means = [layer[t]['mean'] for t in connection_types]
         fig.add_trace(
             go.Scatter(x=connection_types, y=means, mode='lines+markers',
                       name=f'Layer {i}', line=dict(width=3)),
@@ -149,12 +148,17 @@ def create_attention_dashboard(attention_stats_path):
     
     # 4. Edge type pie chart (from last layer)
     last_layer = layers_data[-1]
-    edge_counts = {t: d['count'] for t, d in last_layer['by_type'].items()}
+    edge_counts = {t: d['count'] for t, d in last_layer.items()}
     fig.add_trace(
         go.Pie(labels=list(edge_counts.keys()), values=list(edge_counts.values()),
                hole=0.3),
         row=2, col=2
     )
+    
+    # Update axes labels
+    fig.update_yaxes(title_text="Mean Attention", row=1, col=1)
+    fig.update_yaxes(title_text="Std Dev", row=1, col=2)
+    fig.update_yaxes(title_text="Mean Attention", row=2, col=1)
     
     fig.update_layout(height=900, title_text="Attention Mechanism Analysis Dashboard")
     
@@ -165,73 +169,95 @@ def create_node_importance_dashboard(node_analysis_path):
     """Create interactive node importance dashboard"""
     df = pd.read_csv(node_analysis_path)
     
+    # Rename columns if needed for compatibility
+    if 'degree' in df.columns and 'total_degree' not in df.columns:
+        df['total_degree'] = df['degree']
+    if 'attention_score' in df.columns and 'attention_received' not in df.columns:
+        df['attention_received'] = df['attention_score']
+    
+    # Smart sampling: keep high-degree nodes + random sample for visualization
+    high_degree = df.nlargest(500, 'total_degree')
+    random_sample = df.sample(n=min(1500, len(df)), random_state=42)
+    df_viz = pd.concat([high_degree, random_sample]).drop_duplicates().reset_index(drop=True)
+    
     fig = make_subplots(
         rows=2, cols=2,
         subplot_titles=(
-            'Node Importance vs Confidence',
-            'Degree Distribution',
-            'Class Distribution',
-            'Top Nodes Network'
+            f'Node Confidence vs Degree (n={len(df_viz):,})',
+            f'Degree Distribution (n={len(df):,})',
+            f'Class Distribution (n={len(df):,})',
+            f'Attention Pattern (n={len(df_viz):,})'
         ),
         specs=[[{"type": "scatter"}, {"type": "histogram"}],
                [{"type": "bar"}, {"type": "scatter"}]]
     )
     
-    # 1. Importance vs Confidence scatter
-    colors = df['true_label'].map({0: 'red', 1: 'green'})
+    # 1. Confidence vs Degree scatter (sampled data)
     fig.add_trace(
         go.Scatter(
-            x=df['pagerank'],
-            y=df['confidence'],
+            x=df_viz['total_degree'],
+            y=df_viz['confidence'],
             mode='markers',
             marker=dict(
-                size=df['degree'] * 2,
-                color=df['true_label'],
-                colorscale=['red', 'green'],
-                showscale=True,
-                colorbar=dict(title="True Label")
+                size=8,
+                color=df_viz['true_label'],
+                colorscale=[[0, '#ff4444'], [1, '#44ff44']],
+                showscale=False,
+                opacity=0.7,
+                line=dict(width=0.5, color='white')
             ),
-            text=df['node_id'],
-            hovertemplate='<b>Node %{text}</b><br>PageRank: %{x:.4f}<br>Confidence: %{y:.2f}<extra></extra>'
+            text=df_viz['node_id'],
+            hovertemplate='<b>Node %{text}</b><br>Degree: %{x}<br>Confidence: %{y:.3f}<br>Label: %{marker.color}<extra></extra>'
         ),
         row=1, col=1
     )
     
-    # 2. Degree distribution
+    # 2. Degree distribution (all data)
     fig.add_trace(
-        go.Histogram(x=df['degree'], nbinsx=30, name='Degree'),
+        go.Histogram(x=df['total_degree'], nbinsx=50, name='Degree',
+                    marker_color='steelblue'),
         row=1, col=2
     )
     
-    # 3. Class distribution bar
+    # 3. Class distribution bar (all data)
     class_counts = df['predicted_label'].value_counts()
     fig.add_trace(
-        go.Bar(x=['Fake', 'Real'], y=[class_counts.get(0, 0), class_counts.get(1, 0)],
-               marker_color=['red', 'green']),
+        go.Bar(x=['Fake', 'Real'], 
+               y=[class_counts.get(0, 0), class_counts.get(1, 0)],
+               marker_color=['#ff4444', '#44ff44'],
+               text=[class_counts.get(0, 0), class_counts.get(1, 0)],
+               textposition='auto'),
         row=2, col=1
     )
     
-    # 4. Top nodes (simplified network view)
-    top_nodes = df.nlargest(20, 'pagerank')
+    # 4. Attention received vs given (sampled data)
     fig.add_trace(
         go.Scatter(
-            x=top_nodes['betweenness'],
-            y=top_nodes['pagerank'],
-            mode='markers+text',
-            marker=dict(size=top_nodes['degree']*3, color=top_nodes['true_label'],
-                       colorscale=['red', 'green']),
-            text=top_nodes['node_id'],
-            textposition='top center',
-            hovertemplate='<b>Node %{text}</b><br>Betweenness: %{x:.4f}<br>PageRank: %{y:.4f}<extra></extra>'
+            x=df_viz['attention_given'],
+            y=df_viz['attention_received'],
+            mode='markers',
+            marker=dict(
+                size=8,
+                color=df_viz['total_degree'],
+                colorscale='Viridis',
+                showscale=True,
+                colorbar=dict(title="Degree", x=1.15),
+                opacity=0.7,
+                line=dict(width=0.5, color='white')
+            ),
+            text=df_viz['node_id'],
+            hovertemplate='<b>Node %{text}</b><br>Degree: %{marker.color:.0f}<br>Given: %{x:.3f}<br>Received: %{y:.3f}<extra></extra>'
         ),
         row=2, col=2
     )
     
-    fig.update_xaxes(title_text="PageRank", row=1, col=1)
-    fig.update_yaxes(title_text="Confidence", row=1, col=1)
+    # Update axes
+    fig.update_xaxes(title_text="Total Degree", row=1, col=1, range=[-5, df['total_degree'].max() + 5])
+    fig.update_yaxes(title_text="Confidence", row=1, col=1, range=[0.4, 1.05])
     fig.update_xaxes(title_text="Degree", row=1, col=2)
-    fig.update_xaxes(title_text="Betweenness Centrality", row=2, col=2)
-    fig.update_yaxes(title_text="PageRank", row=2, col=2)
+    fig.update_yaxes(title_text="Count", row=1, col=2)
+    fig.update_xaxes(title_text="Attention Given", row=2, col=2, range=[-0.05, 1.05])
+    fig.update_yaxes(title_text="Attention Received", row=2, col=2, range=[-0.05, 1.05])
     
     fig.update_layout(height=900, title_text="Node Importance Analysis Dashboard", showlegend=False)
     
@@ -329,7 +355,7 @@ def main():
             dashboards.append(("Attention Analysis", fig))
     
     # 3. Node importance
-    node_path = os.path.join(args.experiments_dir, "node_analysis/node_importance.csv")
+    node_path = os.path.join(args.experiments_dir, "node_importance/node_importance_metrics.csv")
     if os.path.exists(node_path):
         print("  ✓ Loading node importance...")
         fig = create_node_importance_dashboard(node_path)
@@ -452,8 +478,53 @@ def main():
             // Initialize plots
     """
     
+    import json as _json
+    import base64 as _b64
+    # Helper: deep clean plotly figure dict to ensure all numpy arrays / typed arrays
+    # are converted into plain Python lists and scalars. This prevents Plotly from
+    # embedding binary 'bdata'/'dtype' blobs that some browsers fail to render.
+    def _deep_clean(obj):
+        # 1) Handle Plotly "typed-array" packed dicts: {'dtype': 'f8', 'bdata': '...'}
+        if isinstance(obj, dict) and 'dtype' in obj and 'bdata' in obj:
+            try:
+                _dtype = obj.get('dtype')
+                _shape = obj.get('shape')
+                _raw = np.frombuffer(_b64.b64decode(obj['bdata']),
+                                     dtype={
+                                         'f8': np.float64, 'f4': np.float32,
+                                         'i8': np.int64,  'i4': np.int32, 'i2': np.int16, 'i1': np.int8,
+                                         'u8': np.uint64, 'u4': np.uint32, 'u2': np.uint16, 'u1': np.uint8,
+                                         'b1': np.bool_
+                                     }.get(_dtype, np.float64))
+                if _shape:
+                    _raw = _raw.reshape(tuple(_shape))
+                return _raw.tolist()
+            except Exception:
+                # Fallback: drop through to generic dict handling
+                pass
+        # 2) Standard numpy arrays
+        if isinstance(obj, np.ndarray):
+            return obj.tolist()
+        # 3) List/Tuple containers
+        if isinstance(obj, (list, tuple)):
+            return [_deep_clean(o) for o in obj]
+        # 4) Dict containers
+        if isinstance(obj, dict):
+            return {k: _deep_clean(v) for k, v in obj.items()}
+        # 5) Objects exposing .tolist() (e.g., pandas/plotly array-likes)
+        tolist = getattr(obj, 'tolist', None)
+        if callable(tolist):
+            try:
+                return tolist()
+            except Exception:
+                return obj
+        return obj
     for i, (_, fig) in enumerate(dashboards):
-        plot_json = fig.to_json()
+        # Use to_plotly_json then deep-clean to strip any residual numpy arrays
+        plot_dict = fig.to_plotly_json()
+        plot_dict = _deep_clean(plot_dict)
+        # Compact separators to reduce file size; ensure_ascii False to preserve any unicode
+        plot_json = _json.dumps(plot_dict, ensure_ascii=False, separators=(",", ":"))
         html_content += f"""
             Plotly.newPlot('plot{i}', {plot_json});
         """
