@@ -1,0 +1,25 @@
+{
+  "num_nodes": 23196,
+  "num_edges": 108137,
+  "num_features": 384,
+  "avg_degree": 4.661881358854975,
+  "edge_types": {
+    "content_similar": 38517,
+    "entity_comention": 66034,
+    "high_activity": 1186,
+    "same_source": 2400
+  },
+  "has_edge_weights": true,
+  "label_leakage": false,
+  "config": {
+    "input_graph": "data/graphs_full/graph_data.pt",
+    "output_graph": "data/graphs_full/graph_data_clean.pt",
+    "news_path": "data/processed/news_processed.parquet",
+    "k_similar": 5,
+    "k_source": 3,
+    "similarity_threshold": 0.65,
+    "entity_max_edges": 20,
+    "temporal_window": 72,
+    "seed": 42
+  }
+}

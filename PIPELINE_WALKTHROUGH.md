@@ -2,16 +2,26 @@
 
 ## Stage-by-Stage Data Transformation Guide
 
-**For Presentation: November 8, 2025**
+**Updated: With Temporal Spreading Dynamics Integration**
 
 ---
 
 ## 📊 Pipeline Overview
 
 ```
-Raw CSV Files → Processed Parquet → Graph Structure → Enriched Graph → Trained Model → Predictions
-     ↓              ↓                    ↓                 ↓               ↓             ↓
-  23,196 rows    384 features      23,196 nodes      106,919 edges    5M params    91.76% F1
+Raw CSV Files → Processed Parquet → Graph Structure → Enriched Graph → Feature Augmentation → Temporal Analysis → Trained Model → Predictions
+     ↓              ↓                    ↓                 ↓                  ↓                    ↓                  ↓             ↓
+  23,196 rows    384 features      23,196 nodes      106,919 edges     536 features       2M+ tweets decoded     7M params    94.80% F1
+```
+
+### Evolution of Model Performance
+
+```
+GAT baseline (500 nodes):                         88.24% F1
+GAT full-scale (23K nodes):                       91.76% F1
+Graph Transformer + Virtual Node:                 91.94% F1
+Graph Transformer + Node2Vec (522-dim):           92.21% Acc / 91.94% F1
+  + Temporal Spreading Features (536-dim):        94.83% Acc / 94.80% F1  ⭐ CURRENT BEST
 ```
 
 ---
@@ -35,10 +45,12 @@ data/raw/fakenewsnet/
 - id              # Unique article identifier (e.g., "gossipcop-123456")
 - news_url        # Original article URL
 - title           # Article headline/title
-- source          # Publisher (e.g., "CNN", "Breitbart")
-- publish_date    # When article was published
-- label           # 'fake' or 'real'
+- tweet_ids       # Tab-separated Twitter Snowflake IDs (KEY for temporal analysis!)
 ```
+
+> **Critical Discovery**: The `tweet_ids` column contains Twitter Snowflake IDs that encode
+> millisecond-precision timestamps. We decode these to recover WHEN each article spread on
+> social media — unlocking temporal spreading dynamics analysis without any external API calls.
 
 ### Sample Raw Data
 
@@ -46,9 +58,8 @@ data/raw/fakenewsnet/
 id: politifact-10488
 news_url: http://www.politifact.com/truth-o-meter/statements/2016/...
 title: "Says Hillary Clinton wants to increase refugees by 500 percent"
-source: politifact
-publish_date: 2016-10-20
-label: fake
+tweet_ids: 937349434668498944\t937379378006282240\t937380068590055425\t...
+label: fake  (derived from filename: politifact_fake.csv)
 ```
 
 ### Raw Data Statistics
@@ -57,7 +68,8 @@ label: fake
 - **Fake News**: 5,755 (24.8%)
 - **Real News**: 17,441 (75.2%)
 - **Sources**: 2 main datasets (GossipCop, PolitiFact)
-- **Date Range**: 2016-2018
+- **Total Tweet IDs**: 2,063,442 (avg ~89 per article)
+- **Date Range**: 2010-2018 (recovered via Snowflake decoding)
 
 **🎯 Key Point for Presentation**: Highly imbalanced dataset (75% real, 25% fake) - realistic scenario!
 
@@ -345,244 +357,404 @@ Structure (same format, more edges):
 
 ---
 
-## STAGE 5: Model Training 🤖
+## STAGE 4B: Feature Augmentation 🔧
 
-### Script: `scripts/train_gat_simple_scaled.py`
+### Graph Statistics (10 dims)
 
-### Model Architecture: Graph Attention Network (GAT)
+**Script**: `scripts/add_graph_statistics.py`
 
-```
-Input: Graph with 23,196 nodes, each with 384 features
+Adds 10 structural features per node computed from the enriched graph:
 
-Layer 1: GAT Conv
-  - Input: 384 dims
-  - Output: 128 dims
-  - Attention heads: 8
-  - Process: Each node attends to its neighbors
+```python
+1. In-degree              # How many articles link TO this one
+2. Out-degree             # How many articles this links TO
+3. Total degree           # Combined connectivity
+4. Clustering coefficient # How interconnected are neighbors
+5. PageRank               # Importance score (like Google's algorithm)
+6. Core number            # Position in network hierarchy
+7. Triangle count         # Participation in triadic closures
+8. Local density          # Avg clustering of neighbors
+9. Betweenness centrality # Bridge node detection
+10. Closeness centrality  # How quickly info reaches this node
 
-  Example computation for Node i:
-    neighbors = [Node j1, j2, j3, ...]
-    for each neighbor j:
-        attention_score = softmax(LeakyReLU(a * [W*h_i || W*h_j]))
-
-    h_i_new = Σ(attention_score_j * W*h_j)
-
-  Output: 128-dim features with 8 attention heads → 1024 dims
-
-Dropout (0.6) → Prevents overfitting
-
-Layer 2: GAT Conv
-  - Input: 1024 dims
-  - Output: 64 dims
-  - Attention heads: 8
-  - Output: 512 dims
-
-Dropout (0.6)
-
-Layer 3: GAT Conv (Output layer)
-  - Input: 512 dims
-  - Output: 2 dims (fake/real logits)
-  - Attention heads: 1
-  - No activation (raw scores)
-
-Final Output: [score_fake, score_real]
-  Example: [-2.34, 3.12] → Softmax → [0.0034, 0.9966] → Predict: Real
+Result: 384 → 394 dimensions per node
 ```
 
-### What Attention Does
+### Node2Vec Embeddings (128 dims)
+
+**Script**: `scripts/add_node2vec_embeddings.py`
+
+```python
+# Learns structural roles via random walks on the graph
+- Dimensions: 128
+- Walk length: 80, walks per node: 10
+- Captures: hub vs peripheral roles, community membership
+
+Result: 394 → 522 dimensions per node
+```
+
+### Output
+
+```
+Location: data/graphs_full/graph_data_with_node2vec.pt
+Features: 522-dim (384 BERT + 10 graph stats + 128 Node2Vec)
+```
+
+---
+
+## STAGE 5: Temporal Spreading Dynamics ⏱️
+
+This is the key innovation — recovering and analyzing HOW news spreads over time using
+timestamps hidden inside Twitter Snowflake IDs.
+
+### Step 5.1: Snowflake Timestamp Decoding
+
+**Script**: `scripts/decode_snowflake_timestamps.py`
+
+```python
+# Twitter Snowflake IDs embed millisecond timestamps!
+# Formula: timestamp_ms = (tweet_id >> 22) + 1288834974657
+
+# Example:
+tweet_id = 937349434668498944
+timestamp_ms = (937349434668498944 >> 22) + 1288834974657
+# = 1512325203754 ms
+# = 2017-12-03 18:00:03 UTC
+
+# Results:
+#   2,063,442 tweet IDs decoded (100% valid!)
+#   21,695 of 23,196 articles have timestamps (93.5%)
+#   Date range: 2010 to 2018
+```
+
+**🎯 Key Insight**: No external API needed — timestamps were hiding in the data all along!
+
+### Step 5.2: Temporal Curve Construction
+
+**Script**: `scripts/build_temporal_curves.py`
+
+For each article, its tweet timestamps are converted into a 48-bin time series
+representing the shape of how it spread on social media:
+
+```python
+# For article "Clinton email scandal" (163 tweets over 29 days):
+
+# Raw timestamps:
+  2017-12-03 18:00  → tweet 1
+  2017-12-03 18:15  → tweet 2
+  2017-12-03 18:16  → tweet 3  (burst!)
+  ...                          (rapid sharing)
+  2017-12-07 14:22  → tweet 80 (slowing down)
+  ...                          (trickle)
+  2018-01-01 09:45  → tweet 163 (late reshare)
+
+# Normalized to 48 time bins (0 = first tweet, 47 = last):
+  Bin 0:  ████████████████████  (spike: 45 tweets)
+  Bin 1:  ████████████          (28 tweets)
+  Bin 2:  ████████              (18 tweets)
+  Bin 3:  ████                  (8 tweets)
+  Bin 4:  ███                   (6 tweets)
+  ...     (gradual decay)
+  Bin 47: █                     (1 tweet)
+
+# Output: shape vector [1.0, 0.62, 0.40, 0.18, 0.13, ..., 0.02]
+```
+
+### Step 5.3: Handcrafted Temporal Features (14 dims)
+
+```python
+# 14 features computed per article from its tweet timestamp distribution:
+
+1.  spread_duration_hours    # How long the article circulated
+2.  propagation_speed        # Tweets per hour (velocity of spread)
+3.  burstiness               # CV of inter-tweet intervals (coordinated vs organic)
+4.  early_ratio              # Fraction of tweets in first 25% of time
+5.  late_ratio               # Fraction of tweets in last 25% of time
+6.  early_late_ratio         # Early vs late activity ratio
+7.  peak_bin_position        # When peak activity occurred (0-1)
+8.  temporal_entropy          # How spread out the sharing is over time
+9.  interval_mean_hours      # Average gap between tweets
+10. interval_std_hours       # Variability in tweet gaps
+11. interval_median_hours    # Typical gap between tweets
+12. interval_skewness        # Asymmetry of interval distribution
+13. num_tweets_log           # Log of total tweet count
+14. acceleration_first_half  # Tweet rate in first vs second half
+```
+
+### Step 5.4: Fake vs Real — Temporal Signal Validation
+
+**Script**: `scripts/analyze_temporal_spreading.py`
+
+**ALL 14 features are statistically significant (p < 0.001)**!
+
+```
+Key Findings:
+  ┌─────────────────────────────────────────────────────────────┐
+  │                        Fake News    Real News    Ratio      │
+  │  Median spread duration  481 hrs     65 hrs      7.4x ⭐    │
+  │  Propagation speed       0.07/hr     0.76/hr     11.7x ⭐   │
+  │  Late activity ratio     23.3%       8.2%        2.8x       │
+  │  Mean interval           337 hrs     54 hrs      6.3x       │
+  └─────────────────────────────────────────────────────────────┘
+
+  Fake news spreads 7.4x LONGER but 11.7x SLOWER than real news!
+  Real news: sharp burst, quick resolution
+  Fake news: slow burn, keeps resurfacing for months
+
+Standalone Classification (temporal features ONLY, no graph):
+  Random Forest on 14 features: 88.37% F1  (!!!)
+  Random Forest on 48-bin curves: 81.91% F1
+  Combined (62 features):        88.53% F1
+
+Verdict: STRONG temporal signal — proceed with model integration.
+```
+
+### Step 5.5: Feature Integration
+
+The 14 normalized temporal features are concatenated with existing graph features:
+
+```
+Final feature vector per node: 536 dimensions
+  [0-384):   BERT sentence embeddings (semantic content)
+  [384-394): Graph statistics (structural role)
+  [394-522): Node2Vec embeddings (learned structural position)
+  [522-536): Temporal spreading features (how news spreads over time) ⭐ NEW
+```
+
+### Temporal Output Files
+
+```
+data/processed/news_with_tweet_timestamps.parquet  # Decoded timestamps
+data/processed/temporal_curves.npy                 # 23,196 × 48 spreading curves
+data/processed/temporal_features.npy               # 23,196 × 14 temporal features (normalized)
+experiments/temporal_analysis/
+  ├── temporal_curves_comparison.png    # Fake vs Real average curves
+  ├── spread_distributions.png         # Duration & speed distributions
+  ├── temporal_clusters.png            # K-means clustering of curves
+  └── temporal_analysis_report.json    # Signal validation results
+```
+
+**🎯 Key Point**: Fake and real news have fundamentally different temporal spreading signatures —
+fake news is a slow burn that keeps resurfacing, while real news has a sharp burst then fades.
+This temporal signal alone achieves 88% F1!
+
+---
+
+## STAGE 6: Model Training 🤖
+
+### Script: `scripts/train_graph_transformer_temporal.py`
+
+### Model Architecture: Graph Transformer with Virtual Node + Temporal Features
+
+The final model uses a **Graph Transformer** architecture that combines graph attention,
+global context via a virtual node, and temporal spreading features.
+
+```
+Input: Graph with 23,196 nodes, each with 536 features
+       (384 BERT + 10 graph stats + 128 Node2Vec + 14 temporal)
+
+┌─────────────────────────────────────────────────────────────┐
+│  Input Projection: Linear(536 → 256)                       │
+│  Maps diverse features to unified hidden dimension          │
+└─────────────────────────────────────────────────────────────┘
+                           ↓
+┌─────────────────────────────────────────────────────────────┐
+│  Graph Transformer Layer × 4                                │
+│                                                             │
+│  For each layer:                                            │
+│    1. Local Attention (GATv2Conv, 8 heads)                  │
+│       - Each node attends to its neighbors                  │
+│       - Learns which connections matter                     │
+│                                                             │
+│    2. Virtual Node Update                                   │
+│       - Global average of all node states → MLP             │
+│       - Acts as a "super-node" for global communication     │
+│       - Solves the limited receptive field problem           │
+│                                                             │
+│    3. Node Update with Global Context                       │
+│       - Concatenate node state + virtual node broadcast     │
+│       - MLP fusion → new node state                         │
+│       - Every node now has global awareness!                │
+│                                                             │
+│  Layer norms + residual connections throughout              │
+└─────────────────────────────────────────────────────────────┘
+                           ↓
+┌─────────────────────────────────────────────────────────────┐
+│  Output Head: Linear(256→256) → GELU → Dropout → Linear(256→2) │
+│  Final: [score_fake, score_real]                             │
+└─────────────────────────────────────────────────────────────┘
+
+Parameters: 7,057,666
+```
+
+### What the Model Sees for Each Node
 
 ```
 Node 145 (fake: "Vaccine causes autism")
 
-Neighbors:
+Feature breakdown (536 dims):
+  [0-384):   BERT embedding capturing "vaccine autism" semantics
+  [384-394): Graph stats: degree=34, PageRank=0.0012, ...
+  [394-522): Node2Vec: structural hub role
+  [522-536): Temporal: spread_duration=2400hrs, speed=0.05/hr,   ⭐ NEW
+             burstiness=4.2, late_ratio=0.31, ...               ⭐ NEW
+             → Looks like slow-burn fake news pattern!          ⭐ NEW
+
+Neighbors (via GATv2 attention):
   Node 67:  "CDC hides vaccine truth" (fake)     → Attention: 0.35 ⭐⭐⭐
   Node 234: "Big pharma conspiracy" (fake)       → Attention: 0.28 ⭐⭐⭐
   Node 512: "Vaccine safety study" (real)        → Attention: 0.12 ⭐
   Node 891: "Weather forecast" (real)            → Attention: 0.02 (ignored)
 
-Model learns: Pay attention to similar fake news (echo chamber!)
+Model learns: Content echoes + temporal spread pattern = confident fake classification
+```
+
+### Three Approaches Tested
+
+We tested three ways to integrate temporal information:
+
+```
+┌──────────────────────────────────────────────────────────────────┐
+│ Approach A: Feature Concatenation (BEST ⭐)                      │
+│   Graph features (522) + temporal features (14) = 536 dims       │
+│   → Same Graph Transformer architecture                          │
+│   Result: 94.80% F1 / 94.83% Accuracy                           │
+├──────────────────────────────────────────────────────────────────┤
+│ Approach B: Dual Encoder Fusion                                  │
+│   Graph branch: Graph Transformer → 256-dim                      │
+│   Temporal branch: 1D-CNN on 48-bin curves → 32-dim              │
+│                  + Linear on 14 features → 32-dim                │
+│   Fusion: concat(256, 32, 32) = 320 → MLP → 2                   │
+│   Result: 94.24% F1 / 94.31% Accuracy                           │
+├──────────────────────────────────────────────────────────────────┤
+│ Approach C: Full Feature Concatenation                            │
+│   Graph (522) + features (14) + curves (48) = 584 dims           │
+│   Result: 94.71% F1 / 94.74% Accuracy                           │
+└──────────────────────────────────────────────────────────────────┘
+
+Simplest approach (A) won — just 14 extra features, massive impact!
 ```
 
 ### Training Process
 
-#### Epoch-by-Epoch Transformation
-
 ```
-Epoch 1:
-  - Random weights
-  - Loss: 0.6931 (random guessing)
-  - Train F1: 52.3%
-  - Val F1: 51.8%
-  → Model doesn't know anything yet
+Optimizer: Adam (lr=0.001, weight_decay=5e-4)
+Scheduler: Cosine Annealing (eta_min=1e-6)
+Gradient clipping: max_norm=1.0
+Early stopping: patience=20 (checked every 5 epochs)
 
-Epoch 10:
-  - Weights start learning patterns
-  - Loss: 0.4523
-  - Train F1: 73.5%
-  - Val F1: 71.2%
-  → Model learns basic patterns (keywords, sources)
+Epoch 1:
+  Loss: 0.69 → Model random
+  Val F1: ~52%
 
 Epoch 30:
-  - Attention patterns emerge
-  - Loss: 0.2145
-  - Train F1: 86.7%
-  - Val F1: 84.3%
-  → Model learns graph structure matters
+  Loss: 0.15 → Learning content + structure + temporal patterns
+  Val F1: ~90%
 
-Epoch 68 (Best):
-  - Converged to optimal weights
-  - Loss: 0.1234
-  - Train F1: 93.2%
-  - Val F1: 89.5%
-  - Test F1: 91.76% ⭐
-  → Model masters echo chambers + content patterns
+Epoch 55 (Best):
+  Loss: 0.09
+  Val F1: 94.18%
+  → Early stopped at epoch 75
 
-Epoch 88:
-  - Early stopping triggered
-  - Val F1 hasn't improved for 20 epochs
-  → Training stops, load best model from Epoch 68
+Test Set Performance:
+  F1:       94.80% ⭐
+  Accuracy: 94.83% ⭐
 ```
 
 ### Output: Trained Model
 
 ```
-Location: experiments/models_fullscale/gat_model_best_scaled.pt
-Size: ~80 MB
-Parameters: 5,034,242
-
-Model weights snapshot:
-{
-    'gat1.lin_src.weight': Tensor(1024, 384),
-    'gat1.att_src': Tensor(8, 128),
-    'gat2.lin_src.weight': Tensor(512, 1024),
-    ...
-    'state_dict': full model state,
-    'optimizer': Adam optimizer state,
-    'epoch': 68,
-    'best_val_f1': 0.8950
-}
+Location: experiments/temporal_integration/best_temporal_model.pt
+Parameters: 7,057,666
+Architecture: Graph Transformer + Virtual Node (4 layers, 256 hidden, 8 heads)
 ```
 
-### Training Metrics Output
-
-```
-Location: experiments/models_fullscale/training_metrics.json
-
-{
-    "epoch": [1, 2, 3, ..., 68, ..., 88],
-    "train_loss": [0.6931, 0.6245, 0.5834, ..., 0.1234, ...],
-    "train_f1": [0.523, 0.587, 0.634, ..., 0.932, ...],
-    "val_f1": [0.518, 0.579, 0.627, ..., 0.895, ...],
-    "learning_rate": [0.001, 0.001, ..., 0.0005, ...]
-}
-```
-
-**🎯 Key Point**: Model learns in 13.5 minutes, attention mechanism is the secret sauce!
+**🎯 Key Point**: Adding just 14 temporal features boosted F1 by +2.86 points (91.94% → 94.80%)!
 
 ---
 
-## STAGE 6: Prediction & Evaluation 📈
+## STAGE 7: Prediction & Evaluation 📈
 
 ### How Model Makes Predictions
 
-#### Step 6.1: Forward Pass
+#### Step 7.1: Forward Pass
 
 ```python
 # Input: Node 1523 (unseen test article)
 title: "Biden raises taxes on middle class"
-embedding: [0.123, -0.456, 0.789, ...] (384 dims)
+features: 536-dim vector
+  [0-384):   BERT embedding of title
+  [384-394): Graph stats (degree=12, PageRank=0.0003, ...)
+  [394-522): Node2Vec structural embedding
+  [522-536): Temporal features:
+             spread_duration=48hrs, speed=2.1/hr, burstiness=3.1,
+             early_ratio=0.72, late_ratio=0.05, ...
+             → Looks like real news pattern (fast burst, quick decay)
+
 neighbors: [Node 234, Node 567, Node 891, ...]
 
-# Layer 1: Attention aggregation
-for each neighbor:
-    compute attention score
-    weight neighbor's features by attention
+# 4 Graph Transformer layers process node features with:
+#   - Local attention (GATv2) to neighbors
+#   - Virtual node for global context
+# Temporal features propagate through attention alongside content
 
-aggregated_features_1 = Σ(attention * neighbor_features)
-# Output: 1024 dims
-
-# Layer 2: More attention
-aggregated_features_2 = GAT_layer_2(aggregated_features_1)
-# Output: 512 dims
-
-# Layer 3: Classification
-logits = GAT_layer_3(aggregated_features_2)
-# Output: [logit_fake, logit_real] = [-1.23, 2.87]
-
-# Softmax
-probabilities = softmax(logits)
-# = [0.015, 0.985]
-
-# Prediction
-prediction = argmax(probabilities) = 1 (REAL)
-confidence = max(probabilities) = 98.5%
-```
-
-#### Step 6.2: Attention Analysis
-
-```python
-# What the model focused on for Node 1523:
-
-Attention weights (Layer 1):
-  Node 234: "Tax policy analysis" (real)        → 0.42 ⭐⭐⭐⭐
-  Node 567: "Biden economic plan" (real)        → 0.31 ⭐⭐⭐
-  Node 891: "Fact-check: Biden taxes" (real)    → 0.18 ⭐⭐
-  Node 1045: "Biden destroys economy" (fake)    → 0.06 ⭐
-  Node 1287: "Stock market news" (real)         → 0.03 (ignored)
-
-Interpretation: Model trusts neighbors with fact-checking context!
+# Output head
+logits = [-1.23, 2.87]
+probabilities = softmax(logits) = [0.015, 0.985]
+prediction = 1 (REAL), confidence = 98.5%
 ```
 
 ### Evaluation Metrics
 
-#### Confusion Matrix (Test Set: 2,320 articles)
+#### Confusion Matrix (Test Set: 3,481 articles)
 
 ```
-                Predicted
-                Fake    Real
-Actual  Fake    514     62      → Recall: 89.2% (caught 514/576 fake)
-        Real    234     1510    → Recall: 86.6% (caught 1510/1744 real)
+                    Predicted
+                    Fake    Real
+Actual  Fake (864)  758     106     → Recall: 87.7% ⭐
+        Real (2617)  74     2543    → Recall: 97.2% ⭐
 
-        ↓       ↓
-     Precision Precision
-     68.7%    96.0%
+        ↓           ↓
+     Precision   Precision
+      91.1%      96.0%
 
-Overall Accuracy: 87.18%
+Overall Accuracy: 94.83% ⭐
 ```
 
 #### F1-Score Breakdown
 
 ```
 Class: Fake News
-  - Precision: 68.7% (514/(514+234))
-  - Recall: 89.2% (514/(514+62))
-  - F1-Score: 77.6%
+  - Precision: 91.1% (758/(758+74))
+  - Recall:    87.7% (758/(758+106))
+  - F1-Score:  89.4%
 
 Class: Real News
-  - Precision: 96.0% (1510/(1510+62))
-  - Recall: 86.6% (1510/(1510+234))
-  - F1-Score: 91.0%
+  - Precision: 96.0% (2543/(2543+106))
+  - Recall:    97.2% (2543/(2543+74))
+  - F1-Score:  96.6%
 
-Macro-Average F1: 84.3%
-Weighted-Average F1: 91.76% ⭐ (accounts for class imbalance)
+Weighted-Average F1: 94.80% ⭐
 ```
 
-#### ROC Curve Analysis
+#### Improvement Over Previous Best
 
 ```
-AUC-ROC: 90.74%
-
-Threshold tuning:
-  Threshold 0.3: Recall=95%, Precision=62% (catch more fakes, more false alarms)
-  Threshold 0.5: Recall=89%, Precision=69% (balanced - current)
-  Threshold 0.7: Recall=78%, Precision=81% (fewer false alarms, miss some fakes)
+                              F1        Accuracy   Fake Recall
+Previous: Graph Transformer   91.94%    92.21%     ~76%
+Current:  + Temporal Features  94.80%    94.83%     87.7%
+                               ──────    ──────     ─────
+Improvement:                  +2.86pts  +2.62pts   +11.7pts ⭐⭐⭐
 ```
 
-**🎯 Key Point**: 91.76% F1 means model correctly classifies >9 out of 10 articles!
+The biggest improvement is in **Fake News Recall** (+11.7 points) — the model catches
+significantly more fake articles by recognizing their distinctive slow-burn temporal pattern.
+
+**🎯 Key Point**: 94.80% F1 — temporal features alone added +2.86 points to the best model!
 
 ---
 
-## STAGE 7: Attention Analysis & Insights 🔍
+## STAGE 8: Attention Analysis & Insights 🔍
 
 ### Script: `scripts/analyze_attention.py`
 
@@ -664,7 +836,7 @@ Files generated:
 
 ---
 
-## STAGE 8: Node Importance Analysis 📊
+## STAGE 9: Node Importance Analysis 📊
 
 ### Script: `scripts/analyze_node_importance.py`
 
@@ -759,7 +931,7 @@ Location: experiments/node_importance/
 
 ---
 
-## STAGE 9: Interactive Dashboard 🎨
+## STAGE 10: Interactive Dashboard 🎨
 
 ### Script: `scripts/create_interactive_dashboard.py`
 
@@ -855,7 +1027,7 @@ Usage:
 
 ```
 Stage 1: Raw CSVs
-  → 23,196 rows × 6 columns
+  → 23,196 rows × 4 columns (+ 2,063,442 tweet IDs)
   → ~5 MB text data
 
 Stage 2: Processed Parquet
@@ -872,15 +1044,24 @@ Stage 4: Enriched Graph
   → 106,919 edges (10.7x increase!)
   → ~145 MB
 
-Stage 5: Trained Model
-  → 5,034,242 parameters
-  → ~80 MB
+Stage 4B: Feature Augmentation
+  → 384 → 522 dims (+ graph stats + Node2Vec)
 
-Stage 6: Predictions
+Stage 5: Temporal Analysis
+  → 2,063,442 tweets decoded → timestamps
+  → 23,196 × 48 temporal curves
+  → 23,196 × 14 temporal features
+  → 522 → 536 dims
+
+Stage 6: Trained Model
+  → 7,057,666 parameters
+  → Graph Transformer + Virtual Node + Temporal Features
+
+Stage 7: Predictions
   → 23,196 predictions
   → ~1 MB (probabilities + labels)
 
-Stage 7-9: Analysis Outputs
+Stage 8-10: Analysis Outputs
   → Visualizations: ~50 images/HTMLs
   → CSVs: ~10 MB
   → Dashboard: ~2.5 MB
@@ -889,15 +1070,19 @@ Stage 7-9: Analysis Outputs
 ### Quality Transformations
 
 ```
-Raw Accuracy (keyword matching): ~60%
+Raw Accuracy (keyword matching):                ~60%
                 ↓
-Traditional ML (logistic regression): ~75%
+Traditional ML (logistic regression):           ~75%
                 ↓
-Simple GNN (no attention): ~82%
+Simple GNN (no attention):                      ~82%
                 ↓
-GAT baseline (500 nodes): 88.24%
+GAT baseline (500 nodes):                       88.24% F1
                 ↓
-GAT full-scale (23K nodes): 91.76% ⭐
+GAT full-scale (23K nodes):                     91.76% F1
+                ↓
+Graph Transformer + Virtual Node (522-dim):     91.94% F1
+                ↓
++ Temporal Spreading Features (536-dim):        94.80% F1 ⭐ (+2.86 pts)
 ```
 
 ---
@@ -907,43 +1092,51 @@ GAT full-scale (23K nodes): 91.76% ⭐
 ### Key Points to Emphasize
 
 1. **Graph Structure is Powerful**
-
    - "We don't treat articles in isolation - we model how they reference each other"
    - Show: Sparse graph (10K edges) → Enriched graph (107K edges)
 
 2. **Attention Mechanism Reveals Echo Chambers**
-
    - "The model learns WHERE to look, not just WHAT to see"
    - Show: Attention by label chart (70.5% fake→fake)
 
-3. **4-Type Edge Enrichment**
+3. **Temporal Spreading Dynamics — The Key Innovation** ⭐
+   - "We discovered that fake and real news spread fundamentally differently over time"
+   - "Fake news is a slow burn (median 481 hours), real news is a quick burst (median 65 hours)"
+   - "We recovered real timestamps from 2 million tweets hidden in Twitter Snowflake IDs"
+   - "Just 14 temporal features alone achieve 88% F1 — a strong standalone signal"
+   - Show: `experiments/temporal_analysis/temporal_curves_comparison.png`
 
-   - "We model 4 types of news propagation:"
-   - Content similarity, Same source, Echo chambers, Viral spread
-
-4. **Scalability**
-
-   - "From 500 articles (baseline) to 23,196 (full-scale)"
-   - "46x scale-up, still trains in 13 minutes!"
+4. **Multi-Signal Fusion**
+   - "Our model combines 4 types of features:"
+   - Content (BERT), Structure (graph stats + Node2Vec), Relationships (edges), **Temporal dynamics**
+   - "Adding temporal features boosted accuracy from 92% to 95%"
 
 5. **Real-World Performance**
-   - "91.76% F1-score means we correctly classify >9 out of 10 articles"
-   - "90.74% AUC - model can rank articles by credibility"
+   - "94.80% F1-score / 94.83% accuracy on 23K articles"
+   - "Fake news recall improved by +11.7 points — catches significantly more misinformation"
+   - "87.7% of fake articles correctly identified"
 
 ### Demo Flow
 
 ```
-1. Show raw CSV (Stage 1) → "This is our starting point"
+1. Show raw CSV (Stage 1) → "This is our starting point — articles + tweet IDs"
 
 2. Show processed parquet (Stage 2) → "We extract semantic embeddings"
 
 3. Show graph visualization (Stage 4) → "We build a network"
 
-4. Show training plot (Stage 5) → "Model learns in real-time"
+4. Show Snowflake decoding (Stage 5) → "We recovered timestamps from 2M tweets!"
 
-5. Show attention heatmap (Stage 7) → "Model focuses on echo chambers"
+5. Show temporal curves comparison → "Fake vs Real spread completely differently"
+   experiments/temporal_analysis/temporal_curves_comparison.png
 
-6. Open interactive dashboard (Stage 9) → "Live exploration"
+6. Show temporal cluster analysis → "6 distinct spreading patterns found"
+   experiments/temporal_analysis/temporal_clusters.png
+
+7. Show comparison table → "94.80% F1 — +2.86 pts improvement"
+   experiments/temporal_integration/results.json
+
+8. Open interactive dashboard (Stage 10) → "Live exploration"
 ```
 
 ### Questions You Might Get
@@ -951,14 +1144,17 @@ GAT full-scale (23K nodes): 91.76% ⭐
 **Q: Why graphs instead of text classification?**
 A: "Fake news doesn't exist in isolation - it spreads through networks. Traditional classifiers miss these propagation patterns."
 
-**Q: What's attention mechanism?**
-A: "Like human attention - the model learns which neighbors to trust. Fake news pays 70% attention to other fake news!"
+**Q: What's the temporal analysis about?**
+A: "Twitter Snowflake IDs contain millisecond timestamps. We decoded 2 million tweets to see HOW each article spread over time. Fake news spreads 7.4x longer but 11.7x slower than real news — it's a slow burn that keeps resurfacing."
+
+**Q: How much did temporal features help?**
+A: "+2.86 F1 points (91.94% → 94.80%). The biggest gain was in fake news recall — +11.7 points. The temporal features alone (without graphs) achieve 88% F1, proving the signal is genuinely discriminative."
+
+**Q: Isn't this just feature engineering, not time series?**
+A: "We convert each article's tweet arrival process into a 48-bin time series (tweet volume over time). We also tested a 1D-CNN temporal encoder that processes these curves — that's a proper time series model. The handcrafted features version worked better though, likely because the curves are short (48 points)."
 
 **Q: How do you handle imbalance (75% real, 25% fake)?**
 A: "We use class weights in loss function and report weighted F1-score. Model doesn't just predict 'real' for everything."
-
-**Q: Can this work in real-time?**
-A: "Current version is batch processing. With streaming graphs (Temporal GNN), yes - that's future work!"
 
 **Q: What about other languages?**
 A: "BERT embeddings are language-specific. We'd need multilingual BERT (mBERT) - also future work!"
@@ -971,17 +1167,52 @@ A: "BERT embeddings are language-specific. We'd need multilingual BERT (mBERT) -
 1. experiments/interactive_dashboard.html
    → For live demo
 
-2. experiments/attention_analysis/attention_by_label_type.png
+2. experiments/temporal_analysis/temporal_curves_comparison.png
+   → Fake vs Real spreading curves (KEY FIGURE)
+
+3. experiments/temporal_analysis/temporal_clusters.png
+   → 6 distinct spreading pattern clusters
+
+4. experiments/temporal_analysis/spread_distributions.png
+   → Duration & speed distributions (fake vs real)
+
+5. experiments/temporal_integration/results.json
+   → Comparison of all approaches with improvement numbers
+
+6. experiments/attention_analysis/attention_by_label_type.png
    → Shows echo chamber effect
 
-3. experiments/models_fullscale/training_metrics.json
-   → Can plot training curves live
-
-4. data/processed/news_processed.parquet
-   → Show sample data if asked
-
-5. This file (PIPELINE_WALKTHROUGH.md)
+7. This file (PIPELINE_WALKTHROUGH.md)
    → Reference for technical questions
+```
+
+---
+
+## 🔧 Pipeline Reproduction Commands
+
+```bash
+# Full pipeline from raw data to final model:
+
+# Stage 1-2: Preprocessing
+python scripts/preprocess_data.py
+
+# Stage 3-4: Graph construction & enrichment
+python scripts/build_graphs_simple.py
+python scripts/enrich_graph.py
+
+# Stage 4B: Feature augmentation
+python scripts/add_graph_statistics.py
+python scripts/add_node2vec_embeddings.py
+
+# Stage 5: Temporal analysis (NEW)
+python scripts/decode_snowflake_timestamps.py     # Decode tweet timestamps
+python scripts/build_temporal_curves.py            # Build temporal features & curves
+python scripts/analyze_temporal_spreading.py       # Validate temporal signal
+
+# Stage 6: Training (NEW)
+python scripts/train_graph_transformer_temporal.py  # Train with temporal features
+
+# Results at: experiments/temporal_integration/results.json
 ```
 
 ---
@@ -989,16 +1220,16 @@ A: "BERT embeddings are language-specific. We'd need multilingual BERT (mBERT) -
 ## ✅ Pre-Presentation Checklist
 
 - [ ] Open interactive dashboard in browser
-- [ ] Verify all visualizations load
-- [ ] Have sample article ready to explain
-- [ ] Know your numbers (91.76% F1, 90.74% AUC, 23K articles)
+- [ ] Verify temporal analysis visualizations load
+- [ ] Have sample article ready to explain (with temporal curve)
+- [ ] Know your numbers: **94.80% F1, 94.83% Acc, +2.86 pts improvement, 23K articles**
+- [ ] Know temporal finding: **fake = 7.4x longer spread, 11.7x slower propagation**
+- [ ] Understand Snowflake decoding: `(tweet_id >> 22) + 1288834974657`
 - [ ] Understand echo chamber finding (70.5%)
-- [ ] Can explain attention mechanism in <1 minute
+- [ ] Can explain temporal analysis in <2 minutes
 - [ ] Have backup: screenshots of all visualizations
 - [ ] Test on presentation computer (browser works?)
 
 ---
 
-**Good luck with your presentation! 🚀**
-
-You have a solid project with real insights - just explain it clearly and you'll do great!
+**Project achieves 94.80% F1 on fake news detection by combining graph neural networks with temporal spreading dynamics analysis — a +2.86 point improvement from discovering that fake and real news have fundamentally different propagation signatures over time.** 🚀
